@@ -41,6 +41,7 @@ export default function TaskDetailPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (taskId) {
@@ -87,6 +88,19 @@ export default function TaskDetailPage() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isActionsOpen]);
+
+  // Cleanup object URLs when attachments change
+  useEffect(() => {
+    return () => {
+      // Clean up any object URLs when component unmounts
+      attachments.forEach(file => {
+        if (file.type.startsWith('image/')) {
+          const fileUrl = URL.createObjectURL(file);
+          URL.revokeObjectURL(fileUrl);
+        }
+      });
+    };
+  }, [attachments]);
 
   const loadTaskData = async () => {
     try {
@@ -185,7 +199,16 @@ export default function TaskDetailPage() {
       
       // Clear form
       setMessageContent('');
-      setAttachments([]);
+      setAttachments(prev => {
+        // Clean up object URLs before clearing attachments
+        prev.forEach(file => {
+          if (file.type.startsWith('image/')) {
+            const fileUrl = URL.createObjectURL(file);
+            URL.revokeObjectURL(fileUrl);
+          }
+        });
+        return [];
+      });
       setReplyToMessage(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -238,6 +261,15 @@ export default function TaskDetailPage() {
       const summaryData = await apiService.generateSummary(parseInt(taskId!));
       setSummary(summaryData);
       toast.success('Summary generated successfully');
+      
+      // Scroll to summary section after a brief delay to allow UI to update
+      setTimeout(() => {
+        summaryRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start',
+          inline: 'nearest' 
+        });
+      }, 100);
     } catch (error) {
       toast.error('Failed to generate summary');
     } finally {
@@ -428,7 +460,7 @@ export default function TaskDetailPage() {
 
           {/* AI Generated Summary */}
           {summary ? (
-            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+            <div ref={summaryRef} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-medium text-gray-900 flex items-center">
                   <SparklesIcon className="h-5 w-5 mr-2 text-primary-600" />
@@ -490,7 +522,7 @@ export default function TaskDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+            <div ref={summaryRef} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="text-center py-8">
                 <SparklesIcon className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No AI Summary Available</h3>
@@ -559,6 +591,7 @@ export default function TaskDetailPage() {
                       message={message}
                       currentUserId={authState.user?.id}
                       onReply={setReplyToMessage}
+                      onImageClick={setSelectedImage}
                     />
                   ))}
                   
@@ -616,21 +649,43 @@ export default function TaskDetailPage() {
                 {/* Attachments preview */}
                 {attachments.length > 0 && (
                   <div className="mb-3 space-y-2">
-                    {attachments.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-gray-50 rounded p-2">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{getFileIcon(file.type)}</span>
-                          <span className="text-sm font-medium">{file.name}</span>
-                          <span className="text-xs text-gray-500">({formatFileSize(file.size)})</span>
+                    {attachments.map((file, index) => {
+                      const isImage = file.type.startsWith('image/');
+                      const fileUrl = URL.createObjectURL(file);
+                      
+                      return (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 rounded p-2">
+                          <div className="flex items-center space-x-2">
+                            {isImage ? (
+                              <img
+                                src={fileUrl}
+                                alt={file.name}
+                                className="w-8 h-8 rounded object-cover cursor-pointer"
+                                onClick={() => setSelectedImage(fileUrl)}
+                                onLoad={() => {
+                                  // Don't revoke here since we're still using it
+                                }}
+                              />
+                            ) : (
+                              <span className="text-lg">{getFileIcon(file.type)}</span>
+                            )}
+                            <span className="text-sm font-medium">{file.name}</span>
+                            <span className="text-xs text-gray-500">({formatFileSize(file.size)})</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (isImage) {
+                                URL.revokeObjectURL(fileUrl);
+                              }
+                              removeAttachment(index);
+                            }}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            ×
+                          </button>
                         </div>
-                        <button
-                          onClick={() => removeAttachment(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -674,6 +729,30 @@ export default function TaskDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Full-screen Image Modal */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-4xl p-4">
+            <img
+              src={selectedImage}
+              alt="Full size preview"
+              className="max-w-full max-h-full object-contain"
+            />
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -683,9 +762,10 @@ interface MessageComponentProps {
   message: Message;
   currentUserId?: number;
   onReply: (message: Message) => void;
+  onImageClick: (image: string | null) => void;
 }
 
-function MessageComponent({ message, currentUserId, onReply }: MessageComponentProps) {
+function MessageComponent({ message, currentUserId, onReply, onImageClick }: MessageComponentProps) {
   const isCurrentUser = message.senderId === currentUserId;
   const initials = message.sender.name.split(' ').map(n => n[0]).join('');
   
@@ -723,14 +803,38 @@ function MessageComponent({ message, currentUserId, onReply }: MessageComponentP
         
         {message.attachments.length > 0 && (
           <div className="mt-2 space-y-2">
-            {message.attachments.map((attachment) => (
-              <div key={attachment.id} className="flex items-center bg-gray-50 rounded p-2 border border-gray-200">
-                <span className="text-gray-500 mr-2">{getFileIcon(attachment.mimetype)}</span>
-                <span className="text-sm font-medium">{attachment.originalName}</span>
-                <span className="text-xs text-gray-500 ml-2">({formatFileSize(attachment.size)})</span>
-                <a href={attachment.url} download className="ml-auto text-primary-600 text-sm">Download</a>
-              </div>
-            ))}
+            {message.attachments.map((attachment) => {
+              const isImage = attachment.mimetype.startsWith('image/');
+              
+              if (isImage) {
+                return (
+                  <div key={attachment.id} className="mt-2">
+                    <img
+                      src={attachment.url}
+                      alt={attachment.originalName}
+                      className="max-w-xs max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => onImageClick(attachment.url)}
+                      onLoad={() => {
+                        // Clean up URL if it was created with createObjectURL
+                        if (attachment.url.startsWith('blob:')) {
+                          URL.revokeObjectURL(attachment.url);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">{attachment.originalName}</p>
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={attachment.id} className="flex items-center bg-gray-50 rounded p-2 border border-gray-200">
+                    <span className="text-gray-500 mr-2">{getFileIcon(attachment.mimetype)}</span>
+                    <span className="text-sm font-medium">{attachment.originalName}</span>
+                    <span className="text-xs text-gray-500 ml-2">({formatFileSize(attachment.size)})</span>
+                    <a href={attachment.url} download className="ml-auto text-primary-600 text-sm">Download</a>
+                  </div>
+                );
+              }
+            })}
           </div>
         )}
         
