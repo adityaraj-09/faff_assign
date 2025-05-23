@@ -33,7 +33,9 @@ export default function LoginForm({ onToggleMode, isActive }: LoginFormProps) {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login(data);
+      // Extract only the required fields for login
+      const { email, password } = data;
+      await login({ email, password });
     } catch (error) {
       // Error is handled by the auth context and API service
     }
