@@ -36,6 +36,8 @@ export default function TaskDetailPage() {
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -68,6 +70,23 @@ export default function TaskDetailPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Close actions dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isActionsOpen) {
+        setIsActionsOpen(false);
+      }
+    };
+
+    if (isActionsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isActionsOpen]);
 
   const loadTaskData = async () => {
     try {
@@ -226,6 +245,34 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleStatusChange = async (newStatus: Task['status']) => {
+    if (!task) return;
+    
+    try {
+      const updatedTask = await apiService.updateTask(task.id, { status: newStatus });
+      setTask(updatedTask);
+      setIsActionsOpen(false);
+      toast.success(`Task status updated to ${newStatus.replace('_', ' ')}`);
+    } catch (error) {
+      toast.error('Failed to update task status');
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (!task) return;
+    
+    if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+      try {
+        await apiService.deleteTask(task.id);
+        toast.success('Task deleted successfully');
+        navigate('/dashboard');
+      } catch (error) {
+        toast.error('Failed to delete task');
+      }
+    }
+    setIsActionsOpen(false);
+  };
+
   if (!task) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -263,10 +310,56 @@ export default function TaskDetailPage() {
                   <PencilIcon className="h-4 w-4 mr-2" />
                   Edit
                 </button>
-                <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                  <EllipsisVerticalIcon className="h-4 w-4" />
-                  Actions
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsActionsOpen(!isActionsOpen)}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    <EllipsisVerticalIcon className="h-4 w-4" />
+                    Actions
+                  </button>
+                  
+                  {isActionsOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                      <div className="py-1">
+                        <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Change Status
+                        </div>
+                        <button
+                          onClick={() => handleStatusChange('open')}
+                          className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Mark as Open
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange('in_progress')}
+                          className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Mark as In Progress
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange('resolved')}
+                          className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Mark as Resolved
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange('closed')}
+                          className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Mark as Closed
+                        </button>
+                        <hr className="my-1" />
+                        <button
+                          onClick={handleDeleteTask}
+                          className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                        >
+                          Delete Task
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             
@@ -334,15 +427,32 @@ export default function TaskDetailPage() {
         
 
           {/* AI Generated Summary */}
-          {summary && (
+          {summary ? (
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-medium text-gray-900 flex items-center">
                   <SparklesIcon className="h-5 w-5 mr-2 text-primary-600" />
                   AI-Generated Summary
                 </h2>
-                <div className="text-sm text-gray-500">
-                  Last updated: 30 minutes ago
+                <div className="flex items-center space-x-3">
+                  <div className="text-sm text-gray-500">
+                    Last updated: {formatDate(summary.updatedAt)}
+                  </div>
+                  <button
+                    onClick={generateSummary}
+                    disabled={generatingSummary}
+                    className="text-primary-600 text-sm font-medium hover:text-primary-700 disabled:opacity-50"
+                  >
+                    {generatingSummary ? (
+                      <div className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Regenerating...
+                      </div>
+                    ) : 'Regenerate'}
+                  </button>
                 </div>
               </div>
               
@@ -372,8 +482,41 @@ export default function TaskDetailPage() {
                   <h3 className="font-medium text-gray-900">Next steps:</h3>
                 </div>
                 <p className="text-gray-700">
-                  Implement monitoring for database connection pool, review recent code changes, and consider implementing circuit breaker as a short-term mitigation.
+                  {summary.entities && summary.entities.length > 0 
+                    ? summary.entities.join(', ')
+                    : 'Review discussion and implement necessary changes based on findings.'
+                  }
                 </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div className="text-center py-8">
+                <SparklesIcon className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No AI Summary Available</h3>
+                <p className="text-gray-500 mb-6">
+                  Generate an AI-powered summary of this task's discussion to quickly understand the key points, investigation progress, and suggested next steps.
+                </p>
+                <button
+                  onClick={generateSummary}
+                  disabled={generatingSummary}
+                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generatingSummary ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating Summary...
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="h-4 w-4 mr-2" />
+                      Generate AI Summary
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
@@ -386,9 +529,18 @@ export default function TaskDetailPage() {
                 
                 <button 
                   onClick={generateSummary}
-                  className="text-primary-600 text-sm font-medium"
+                  disabled={generatingSummary}
+                  className="text-primary-600 text-sm font-medium hover:text-primary-700 disabled:opacity-50"
                 >
-                  Show AI Summary
+                  {generatingSummary ? (
+                    <div className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating...
+                    </div>
+                  ) : summary ? 'Update Summary' : 'Generate Summary'}
                 </button>
               </div>
             </div>

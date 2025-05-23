@@ -83,7 +83,7 @@ export const login = async (req: Request, res: Response) => {
       console.log("email", email);
       console.log("password", password);
       console.log("user not found");
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(404).json({ message: 'Invalid email or password' });
     }
 
     // Validate password

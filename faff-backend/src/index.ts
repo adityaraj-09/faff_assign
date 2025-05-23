@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import rateLimit from 'express-rate-limit';
 import { sequelize } from './models';
+import { User } from './models';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -111,6 +112,24 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Server is running' });
 });
 
+// Debug route to check user count
+app.get('/debug/users', async (req, res) => {
+  try {
+    const userCount = await User.count();
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+    res.status(200).json({ 
+      count: userCount, 
+      users: users,
+      message: `Found ${userCount} users in database`
+    });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 // Set up WebSocket handlers
 setupWebSocketHandlers(io);
 
@@ -134,15 +153,34 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connection has been established successfully.');
     
-    // Sync database models (in development)
-    // if (process.env.NODE_ENV === 'development') {
-    //   // First create tables
-    //   await sequelize.sync({ force: true });
-    //   console.log('Database tables created.');
+    // Sync database models safely - only create tables if they don't exist
+    // try {
+    //   // Use sync without force to avoid deleting existing data
+    //   await sequelize.sync({ alter: false });
+    //   console.log('Database models synchronized successfully (safe mode).');
       
-    //   // Then add foreign key constraints
-    //   await sequelize.sync({ alter: true });
-    //   console.log('Database models synchronized.');
+    //   // Log current user count to help track deletions
+    //   const userCount = await User.count();
+    //   console.log(`[DATABASE] Current user count: ${userCount}`);
+      
+    //   // Create a test user if none exist (for debugging)
+    //   if (userCount === 0) {
+    //     console.log('[DATABASE] No users found. Creating test user...');
+    //     try {
+    //       const testUser = await User.create({
+    //         name: 'Test User',
+    //         email: 'test@example.com',
+    //         password: 'password123',
+    //         role: 'admin'
+    //       });
+    //       console.log(`[DATABASE] Test user created: ${testUser.email} (ID: ${testUser.id})`);
+    //     } catch (createError) {
+    //       console.error('[DATABASE] Failed to create test user:', createError);
+    //     }
+    //   }
+    // } catch (syncError) {
+    //   console.error('Database sync error:', syncError);
+    //   console.log('Note: Some tables may already exist. This is normal.');
     // }
     
     // Start server

@@ -51,7 +51,7 @@ export default function DashboardPage() {
   useEffect(() => {
     loadTasks();
     loadUsers();
-  }, [currentPage, statusFilter, priorityFilter, assigneeFilter]);
+  }, [currentPage, statusFilter, priorityFilter, assigneeFilter, searchTerm]);
 
   const loadTasks = async () => {
     try {
@@ -101,6 +101,18 @@ export default function DashboardPage() {
       console.error('Failed to create ticket:', error);
     }
   };
+
+  // Filter tasks based on search term
+  const filteredTasks = tasks.filter(task => {
+    if (!searchTerm.trim()) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      task.title.toLowerCase().includes(searchLower) ||
+      task.description?.toLowerCase().includes(searchLower) ||
+      task.id.toString().includes(searchTerm) ||
+      task.assignedTo?.name.toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
     <div className="max-w-[1200px] mx-auto">
@@ -300,7 +312,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {tasks.map((task) => (
+              {filteredTasks.map((task) => (
                 <tr key={task.id} className="text-sm text-gray-900">
                   <td className="py-3 px-4">#{task.id}</td>
                   <td className="py-3 px-4">{task.title}</td>
@@ -338,7 +350,8 @@ export default function DashboardPage() {
         {/* Pagination */}
         <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
           <div className="text-gray-600">
-            Showing 1 to 5 of 42 results
+            Showing {filteredTasks.length} of {tasks.length} results
+            {searchTerm && <span className="text-primary-600"> (filtered)</span>}
           </div>
           <div className="flex items-center space-x-2">
             <button

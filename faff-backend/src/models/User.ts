@@ -57,12 +57,26 @@ User.init(
           const salt = await bcrypt.genSalt(10);
           user.password = await bcrypt.hash(user.password, salt);
         }
+        console.log(`[USER HOOK] Creating user: ${user.email}`);
+      },
+      afterCreate: async (user: User) => {
+        console.log(`[USER HOOK] User created successfully: ${user.email} (ID: ${user.id})`);
       },
       beforeUpdate: async (user: User) => {
         if (user.changed('password')) {
           const salt = await bcrypt.genSalt(10);
           user.password = await bcrypt.hash(user.password, salt);
         }
+        console.log(`[USER HOOK] Updating user: ${user.email} (ID: ${user.id})`);
+      },
+      afterUpdate: async (user: User) => {
+        console.log(`[USER HOOK] User updated successfully: ${user.email} (ID: ${user.id})`);
+      },
+      beforeDestroy: async (user: User) => {
+        console.log(`[USER HOOK] WARNING: About to delete user: ${user.email} (ID: ${user.id})`);
+      },
+      afterDestroy: async (user: User) => {
+        console.log(`[USER HOOK] ALERT: User deleted: ${user.email} (ID: ${user.id})`);
       }
     }
   }
