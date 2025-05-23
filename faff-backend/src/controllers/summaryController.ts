@@ -181,6 +181,8 @@ export const generateSummary = async (req: Request, res: Response) => {
       content: msg.content,
       sender: msg.get('sender') as { id: number; name: string },
       createdAt: msg.createdAt
+
+      
     }));
     
     const aiSummary = await generateTaskSummary(messagesToSummarize, task.status);

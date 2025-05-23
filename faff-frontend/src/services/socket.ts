@@ -12,7 +12,7 @@ class SocketService {
       return;
     }
 
-    this.socket = io(SOCKET_URL, {
+    this.socket = io("https://faff-assign.onrender.com", {
       auth: {
         token,
       },
