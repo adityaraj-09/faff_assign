@@ -30,6 +30,7 @@ export const register = async (req: Request, res: Response) => {
 
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
+    console.log("existingUser", existingUser);
     if (existingUser) {
       return res.status(400).json({ message: 'User with this email already exists' });
     }
@@ -79,6 +80,9 @@ export const login = async (req: Request, res: Response) => {
     // Find user by email
     const user = await User.findOne({ where: { email } });
     if (!user) {
+      console.log("email", email);
+      console.log("password", password);
+      console.log("user not found");
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
@@ -101,6 +105,7 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: process.env.JWT_EXPIRATION || '24h' } as SignOptions
     );
 
+    console.log("user", user);
     return res.status(200).json({
       message: 'Login successful',
       token,

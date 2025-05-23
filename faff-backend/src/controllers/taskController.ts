@@ -5,7 +5,7 @@ import { Task, User } from '../models';
 // Create a new task
 export const createTask = async (req: Request, res: Response) => {
   try {
-    const { title, assignedToId, priority, tags } = req.body;
+    const { title, assignedToId, priority, tags, description, stepsToReproduce } = req.body;
     const requestedById = (req as any).user.id;
 
     const task = await Task.create({
@@ -14,6 +14,8 @@ export const createTask = async (req: Request, res: Response) => {
       assignedToId: assignedToId || null,
       priority: priority || 'medium',
       tags: tags || [],
+      description: description || '',
+      stepsToReproduce: stepsToReproduce || [],
       status: 'Logged'
     });
 

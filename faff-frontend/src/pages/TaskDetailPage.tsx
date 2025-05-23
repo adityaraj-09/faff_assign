@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import type { Task, Message, Summary, TypingUser, Attachment } from '../types';
+import type { Task, Message, Summary, TypingUser } from '../types';
 import apiService from '../services/api';
 import socketService from '../services/socket';
 import { 
   ArrowLeftIcon,
   PaperClipIcon,
-  PaperAirplaneIcon,
-  UserCircleIcon,
   SparklesIcon,
   PencilIcon,
   EllipsisVerticalIcon,
@@ -17,12 +15,10 @@ import {
 import { 
   formatDate, 
   formatFullDate, 
-  getPriorityColor, 
-  getStatusColor, 
   capitalizeFirst, 
   formatFileSize,
   getFileIcon,
-  isImageFile,
+
   cn
 } from '../utils';
 import toast from 'react-hot-toast';
@@ -140,10 +136,33 @@ export default function TaskDetailPage() {
         taskId: parseInt(taskId!),
         content: messageContent,
         replyToId: replyToMessage?.id,
-        files: attachments.length > 0 ? attachments : undefined,
+        attachments: attachments.length > 0 ? [] : undefined,
       };
 
-      await apiService.createMessage(messageData);
+      // Send message via WebSocket instead of API
+      socketService.sendMessage(messageData);
+      
+      // For handling file attachments, we still need to upload them separately
+      if (attachments.length > 0) {
+        // Upload files and get attachments
+        const formData = new FormData();
+        attachments.forEach(file => {
+          formData.append('files', file);
+        });
+        
+        // Upload files through API since large binary data is better sent via HTTP
+        const uploadedAttachments = await apiService.uploadAttachments(parseInt(taskId!), formData);
+        
+        // Then send a message with attachments via WebSocket
+        if (uploadedAttachments && uploadedAttachments.length > 0) {
+          socketService.sendMessage({
+            taskId: parseInt(taskId!),
+            content: messageContent,
+            replyToId: replyToMessage?.id,
+            attachments: uploadedAttachments,
+          });
+        }
+      }
       
       // Clear form
       setMessageContent('');

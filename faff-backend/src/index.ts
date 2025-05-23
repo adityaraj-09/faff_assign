@@ -14,6 +14,7 @@ import taskRoutes from './routes/taskRoutes';
 import messageRoutes from './routes/messageRoutes';
 import summaryRoutes from './routes/summaryRoutes';
 import qaRoutes from './routes/qaRoutes';
+import attachmentsRoutes from './routes/attachments';
 
 // Import WebSocket handlers
 import setupWebSocketHandlers from './socket';
@@ -92,6 +93,7 @@ app.use('/api/', apiLimiter);
 
 // Apply upload rate limiting to routes that handle file uploads
 app.use('/api/messages', uploadLimiter);
+app.use('/api/attachments', uploadLimiter);
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -102,6 +104,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/summaries', summaryRoutes);
 app.use('/api/qa', qaRoutes);
+app.use('/api/attachments', attachmentsRoutes);
 
 // Health check route
 app.get('/health', (req, res) => {

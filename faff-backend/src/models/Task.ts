@@ -12,7 +12,7 @@ class Task extends Model {
   public requestedById!: number;
   public assignedToId!: number | null;
   public status!: TaskStatus;
-  public priority!: 'low' | 'medium' | 'high';
+  public priority!: 'low' | 'medium' | 'high' | 'urgent';
   public tags!: string[];
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -61,7 +61,7 @@ Task.init(
       defaultValue: 'Logged'
     },
     priority: {
-      type: DataTypes.ENUM('low', 'medium', 'high'),
+      type: DataTypes.ENUM('low', 'medium', 'high', 'urgent'),
       allowNull: false,
       defaultValue: 'medium'
     },

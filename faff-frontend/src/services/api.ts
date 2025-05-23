@@ -223,6 +223,17 @@ class ApiService {
     return response.data.data;
   }
 
+  // File upload endpoint
+  async uploadAttachments(taskId: number, formData: FormData): Promise<any[]> {
+    formData.append('taskId', taskId.toString());
+    const response = await this.api.post('/attachments/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data.attachments;
+  }
+
   // Users endpoint
   async getUsers(): Promise<User[]> {
     const response = await this.api.get('/auth/users');
