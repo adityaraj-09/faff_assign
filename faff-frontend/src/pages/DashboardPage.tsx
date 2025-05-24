@@ -14,10 +14,11 @@ import { formatDate, cn } from '../utils';
 
 // Status colors
 const statusColors = {
-  'open': 'bg-blue-100 text-blue-800',
-  'in_progress': 'bg-yellow-100 text-yellow-800',
-  'resolved': 'bg-green-100 text-green-800',
-  'closed': 'bg-gray-100 text-gray-800'
+  'Logged': 'bg-blue-100 text-blue-800',
+  'Ongoing': 'bg-yellow-100 text-yellow-800',
+  'Reviewed': 'bg-purple-100 text-purple-800',
+  'Done': 'bg-green-100 text-green-800',
+  'Blocked': 'bg-red-100 text-red-800'
 };
 
 // Priority colors
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
@@ -53,20 +55,35 @@ export default function DashboardPage() {
     loadUsers();
   }, [currentPage, statusFilter, priorityFilter, assigneeFilter, searchTerm]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [statusFilter, priorityFilter, assigneeFilter, searchTerm]);
+
   const loadTasks = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getTasks({
+      const params: any = {
         page: currentPage,
         limit: 5,
-        status: statusFilter || undefined,
-        priority: priorityFilter || undefined,
-        assignedTo: assigneeFilter ? parseInt(assigneeFilter) : undefined,
-      });
+      };
+      
+      // Add filters only if they have values
+      if (statusFilter) params.status = statusFilter;
+      if (priorityFilter) params.priority = priorityFilter;
+      if (assigneeFilter) params.assignedToId = parseInt(assigneeFilter);
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+      
+      const response = await apiService.getTasks(params);
       setTasks(response.tasks);
-      setTotalPages(Math.ceil(42 / 5)); // Hardcoded total for now
+      setTotalPages(response.totalPages);
+      setTotalCount(response.totalCount);
     } catch (error) {
       console.error('Failed to load tasks:', error);
+      setTasks([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -102,17 +119,18 @@ export default function DashboardPage() {
     }
   };
 
-  // Filter tasks based on search term
-  const filteredTasks = tasks.filter(task => {
-    if (!searchTerm.trim()) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      task.title.toLowerCase().includes(searchLower) ||
-      task.description?.toLowerCase().includes(searchLower) ||
-      task.id.toString().includes(searchTerm) ||
-      task.assignedTo?.name.toLowerCase().includes(searchLower)
-    );
-  });
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setPriorityFilter('');
+    setAssigneeFilter('');
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = searchTerm || statusFilter || priorityFilter || assigneeFilter;
+
+  // Since we're now using server-side filtering, we don't need client-side filtering
+  const displayTasks = tasks;
 
   return (
     <div className="max-w-[1200px] mx-auto">
@@ -127,10 +145,11 @@ export default function DashboardPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
             >
               <option value="">All Tickets</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
+              <option value="Logged">Logged</option>
+              <option value="Ongoing">Ongoing</option>
+              <option value="Reviewed">Reviewed</option>
+              <option value="Done">Done</option>
+              <option value="Blocked">Blocked</option>
             </select>
           </div>
 
@@ -173,11 +192,30 @@ export default function DashboardPage() {
                 placeholder="Search tickets..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2"
+                className="w-full border border-gray-300 rounded-lg pl-10 pr-10 py-2"
               />
               <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-2.5 text-gray-400" />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              )}
             </div>
           </div>
+
+          {hasActiveFilters && (
+            <div className="col-span-12 flex justify-end">
+              <button
+                onClick={clearFilters}
+                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -312,37 +350,56 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredTasks.map((task) => (
-                <tr key={task.id} className="text-sm text-gray-900">
-                  <td className="py-3 px-4">#{task.id}</td>
-                  <td className="py-3 px-4">{task.title}</td>
-                  <td className="py-3 px-4">
-                    <span className={cn('px-2 py-1 rounded-full text-xs font-medium', statusColors[task.status])}>
-                      {task.status === 'in_progress' ? 'In Progress' : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={cn('px-2 py-1 rounded-full text-xs font-medium', priorityColors[task.priority])}>
-                      {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center">
-                      <div className="h-6 w-6 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-medium mr-2">
-                        {task.assignedTo?.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <span>{task.assignedTo?.name}</span>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center">
+                    <div className="flex justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
                     </div>
                   </td>
-                  <td className="py-3 px-4">{formatDate(task.createdAt)}</td>
-                  <td className="py-3 px-4">{formatDate(task.updatedAt)}</td>
-                  <td className="py-3 px-4">
-                    <Link to={`/tasks/${task.id}`} className="text-primary-600 hover:text-primary-700 font-medium">
-                      View
-                    </Link>
+                </tr>
+              ) : displayTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-gray-500">
+                    {(searchTerm || statusFilter || priorityFilter || assigneeFilter) 
+                      ? 'No tasks match the current filters.' 
+                      : 'No tasks found.'
+                    }
                   </td>
                 </tr>
-              ))}
+              ) : (
+                displayTasks.map((task) => (
+                  <tr key={task.id} className="text-sm text-gray-900">
+                    <td className="py-3 px-4">#{task.id}</td>
+                    <td className="py-3 px-4">{task.title}</td>
+                    <td className="py-3 px-4">
+                      <span className={cn('px-2 py-1 rounded-full text-xs font-medium', statusColors[task.status])}>
+                        {task.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={cn('px-2 py-1 rounded-full text-xs font-medium', priorityColors[task.priority])}>
+                        {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center">
+                        <div className="h-6 w-6 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-medium mr-2">
+                          {task.assignedTo?.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <span>{task.assignedTo?.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">{formatDate(task.createdAt)}</td>
+                    <td className="py-3 px-4">{formatDate(task.updatedAt)}</td>
+                    <td className="py-3 px-4">
+                      <Link to={`/tasks/${task.id}`} className="text-primary-600 hover:text-primary-700 font-medium">
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -350,39 +407,63 @@ export default function DashboardPage() {
         {/* Pagination */}
         <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm">
           <div className="text-gray-600">
-            Showing {filteredTasks.length} of {tasks.length} results
-            {searchTerm && <span className="text-primary-600"> (filtered)</span>}
+            Showing {((currentPage - 1) * 5) + 1}-{Math.min(currentPage * 5, totalCount)} of {totalCount} results
+            {(searchTerm || statusFilter || priorityFilter || assigneeFilter) && 
+              <span className="text-primary-600"> (filtered)</span>
+            }
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-50"
+              disabled={currentPage === 1 || loading}
+              className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeftIcon className="h-5 w-5" />
             </button>
             
-            {[1, 2, 3, '...', 8, 9].map((page, i) => (
-              <button
-                key={i}
-                onClick={() => typeof page === 'number' && setCurrentPage(page)}
-                className={cn(
-                  'px-3 py-1 rounded-md',
-                  currentPage === page
-                    ? 'bg-primary-600 text-white'
-                    : page === '...'
-                    ? 'text-gray-600 cursor-default'
-                    : 'hover:bg-gray-100 text-gray-600'
-                )}
-              >
-                {page}
-              </button>
-            ))}
+            {/* Show page numbers dynamically */}
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let pageNumber;
+              if (totalPages <= 7) {
+                pageNumber = i + 1;
+              } else if (currentPage <= 4) {
+                pageNumber = i + 1;
+              } else if (currentPage >= totalPages - 3) {
+                pageNumber = totalPages - 6 + i;
+              } else {
+                pageNumber = currentPage - 3 + i;
+              }
+              
+              // Show ellipsis
+              if (totalPages > 7) {
+                if ((currentPage > 4 && i === 0) || (currentPage < totalPages - 3 && i === 6)) {
+                  return (
+                    <span key={i} className="px-3 py-1 text-gray-600">...</span>
+                  );
+                }
+              }
+              
+              return (
+                <button
+                  key={pageNumber}
+                  onClick={() => setCurrentPage(pageNumber)}
+                  disabled={loading}
+                  className={cn(
+                    'px-3 py-1 rounded-md',
+                    currentPage === pageNumber
+                      ? 'bg-primary-600 text-white'
+                      : 'hover:bg-gray-100 text-gray-600 disabled:opacity-50'
+                  )}
+                >
+                  {pageNumber}
+                </button>
+              );
+            })}
             
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-50"
+              disabled={currentPage === totalPages || loading}
+              className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronRightIcon className="h-5 w-5" />
             </button>

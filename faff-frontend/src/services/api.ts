@@ -88,7 +88,8 @@ class ApiService {
     limit?: number;
     status?: string;
     priority?: string;
-    assignedTo?: number;
+    assignedToId?: number;
+    search?: string;
   }): Promise<{
     tasks: Task[];
     totalCount: number;

@@ -18,7 +18,7 @@ import {
   capitalizeFirst, 
   formatFileSize,
   getFileIcon,
-
+  isImageFile,
   cn
 } from '../utils';
 import toast from 'react-hot-toast';
@@ -38,8 +38,10 @@ export default function TaskDetailPage() {
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const actionsDropdownRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +77,7 @@ export default function TaskDetailPage() {
   // Close actions dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isActionsOpen) {
+      if (isActionsOpen && actionsDropdownRef.current && !actionsDropdownRef.current.contains(event.target as Node)) {
         setIsActionsOpen(false);
       }
     };
@@ -94,7 +96,7 @@ export default function TaskDetailPage() {
     return () => {
       // Clean up any object URLs when component unmounts
       attachments.forEach(file => {
-        if (file.type.startsWith('image/')) {
+        if (isImageFile(file.type)) {
           const fileUrl = URL.createObjectURL(file);
           URL.revokeObjectURL(fileUrl);
         }
@@ -165,17 +167,7 @@ export default function TaskDetailPage() {
     if (!messageContent.trim() && attachments.length === 0) return;
 
     try {
-      const messageData = {
-        taskId: parseInt(taskId!),
-        content: messageContent,
-        replyToId: replyToMessage?.id,
-        attachments: attachments.length > 0 ? [] : undefined,
-      };
-
-      // Send message via WebSocket instead of API
-      socketService.sendMessage(messageData);
-      
-      // For handling file attachments, we still need to upload them separately
+      // For handling file attachments, we need to upload them first
       if (attachments.length > 0) {
         // Upload files and get attachments
         const formData = new FormData();
@@ -195,6 +187,13 @@ export default function TaskDetailPage() {
             attachments: uploadedAttachments,
           });
         }
+      } else {
+        // Send text-only message via WebSocket
+        socketService.sendMessage({
+          taskId: parseInt(taskId!),
+          content: messageContent,
+          replyToId: replyToMessage?.id,
+        });
       }
       
       // Clear form
@@ -202,7 +201,7 @@ export default function TaskDetailPage() {
       setAttachments(prev => {
         // Clean up object URLs before clearing attachments
         prev.forEach(file => {
-          if (file.type.startsWith('image/')) {
+          if (isImageFile(file.type)) {
             const fileUrl = URL.createObjectURL(file);
             URL.revokeObjectURL(fileUrl);
           }
@@ -277,14 +276,14 @@ export default function TaskDetailPage() {
     }
   };
 
-  const handleStatusChange = async (newStatus: Task['status']) => {
+  const handleStatusChange = async (newStatus: string) => {
     if (!task) return;
     
     try {
-      const updatedTask = await apiService.updateTask(task.id, { status: newStatus });
+      const updatedTask = await apiService.updateTask(task.id, { status: newStatus as any });
       setTask(updatedTask);
       setIsActionsOpen(false);
-      toast.success(`Task status updated to ${newStatus.replace('_', ' ')}`);
+      toast.success(`Task status updated to ${newStatus}`);
     } catch (error) {
       toast.error('Failed to update task status');
     }
@@ -303,6 +302,14 @@ export default function TaskDetailPage() {
       }
     }
     setIsActionsOpen(false);
+  };
+
+  const handleEditTask = () => {
+    // For now, we'll show an alert. You can implement a proper edit modal or navigate to edit page
+    setIsEditing(true);
+    toast.success('Edit functionality will be implemented here');
+    // TODO: Implement edit task functionality
+    // This could navigate to an edit page or open an edit modal
   };
 
   if (!task) {
@@ -338,11 +345,14 @@ export default function TaskDetailPage() {
               </div>
               
               <div className="flex items-center space-x-2">
-                <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <button 
+                  onClick={handleEditTask}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
                   <PencilIcon className="h-4 w-4 mr-2" />
                   Edit
                 </button>
-                <div className="relative">
+                <div className="relative" ref={actionsDropdownRef}>
                   <button 
                     onClick={() => setIsActionsOpen(!isActionsOpen)}
                     className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -358,28 +368,34 @@ export default function TaskDetailPage() {
                           Change Status
                         </div>
                         <button
-                          onClick={() => handleStatusChange('open')}
+                          onClick={() => handleStatusChange('Logged')}
                           className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
-                          Mark as Open
+                          Mark as Logged
                         </button>
                         <button
-                          onClick={() => handleStatusChange('in_progress')}
+                          onClick={() => handleStatusChange('Ongoing')}
                           className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
-                          Mark as In Progress
+                          Mark as Ongoing
                         </button>
                         <button
-                          onClick={() => handleStatusChange('resolved')}
+                          onClick={() => handleStatusChange('Reviewed')}
                           className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
-                          Mark as Resolved
+                          Mark as Reviewed
                         </button>
                         <button
-                          onClick={() => handleStatusChange('closed')}
+                          onClick={() => handleStatusChange('Done')}
                           className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
-                          Mark as Closed
+                          Mark as Done
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange('Blocked')}
+                          className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          Mark as Blocked
                         </button>
                         <hr className="my-1" />
                         <button
@@ -403,12 +419,14 @@ export default function TaskDetailPage() {
               <div>
                 <div className="text-sm font-medium text-gray-500 mb-1">Status:</div>
                 <span className={cn('px-3 py-1 rounded-full text-sm font-medium', 
-                  task.status === 'open' ? 'bg-blue-100 text-blue-800' :
-                  task.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                  task.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                  task.status === 'Logged' ? 'bg-blue-100 text-blue-800' :
+                  task.status === 'Ongoing' ? 'bg-yellow-100 text-yellow-800' :
+                  task.status === 'Reviewed' ? 'bg-purple-100 text-purple-800' :
+                  task.status === 'Done' ? 'bg-green-100 text-green-800' :
+                  task.status === 'Blocked' ? 'bg-red-100 text-red-800' :
                   'bg-gray-100 text-gray-800'
                 )}>
-                  {task.status === 'in_progress' ? 'In Progress' : capitalizeFirst(task.status)}
+                  {task.status}
                 </span>
               </div>
               
@@ -650,7 +668,7 @@ export default function TaskDetailPage() {
                 {attachments.length > 0 && (
                   <div className="mb-3 space-y-2">
                     {attachments.map((file, index) => {
-                      const isImage = file.type.startsWith('image/');
+                      const isImage = isImageFile(file.type);
                       const fileUrl = URL.createObjectURL(file);
                       
                       return (
@@ -766,7 +784,6 @@ interface MessageComponentProps {
 }
 
 function MessageComponent({ message, currentUserId, onReply, onImageClick }: MessageComponentProps) {
-  const isCurrentUser = message.senderId === currentUserId;
   const initials = message.sender.name.split(' ').map(n => n[0]).join('');
   
   return (
@@ -804,33 +821,71 @@ function MessageComponent({ message, currentUserId, onReply, onImageClick }: Mes
         {message.attachments.length > 0 && (
           <div className="mt-2 space-y-2">
             {message.attachments.map((attachment) => {
-              const isImage = attachment.mimetype.startsWith('image/');
+              const isImage = isImageFile(attachment.mimetype);
               
               if (isImage) {
                 return (
                   <div key={attachment.id} className="mt-2">
-                    <img
-                      src={attachment.url}
-                      alt={attachment.originalName}
-                      className="max-w-xs max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => onImageClick(attachment.url)}
-                      onLoad={() => {
-                        // Clean up URL if it was created with createObjectURL
-                        if (attachment.url.startsWith('blob:')) {
-                          URL.revokeObjectURL(attachment.url);
-                        }
-                      }}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">{attachment.originalName}</p>
+                    <div className="relative inline-block">
+                      <img
+                        src={attachment.url}
+                        alt={attachment.originalName}
+                        className="max-w-xs max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                        onClick={() => onImageClick(attachment.url)}
+                        onLoad={() => {
+                          // Clean up URL if it was created with createObjectURL
+                          if (attachment.url.startsWith('blob:')) {
+                            URL.revokeObjectURL(attachment.url);
+                          }
+                        }}
+                      />
+                      {/* Image overlay with download option */}
+                      <div className="absolute top-2 right-2 opacity-0 hover:opacity-100 transition-opacity">
+                        <a
+                          href={attachment.url}
+                          download={attachment.originalName}
+                          className="bg-black bg-opacity-50 text-white p-1 rounded text-xs hover:bg-opacity-75"
+                          title="Download image"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          ↓
+                        </a>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-500 truncate">{attachment.originalName}</p>
+                      <a 
+                        href={attachment.url} 
+                        download={attachment.originalName}
+                        className="text-xs text-primary-600 hover:text-primary-700 ml-2"
+                      >
+                        Download
+                      </a>
+                    </div>
                   </div>
                 );
               } else {
                 return (
-                  <div key={attachment.id} className="flex items-center bg-gray-50 rounded p-2 border border-gray-200">
-                    <span className="text-gray-500 mr-2">{getFileIcon(attachment.mimetype)}</span>
-                    <span className="text-sm font-medium">{attachment.originalName}</span>
-                    <span className="text-xs text-gray-500 ml-2">({formatFileSize(attachment.size)})</span>
-                    <a href={attachment.url} download className="ml-auto text-primary-600 text-sm">Download</a>
+                  <div key={attachment.id} className="flex items-center bg-gray-50 rounded-lg p-3 border border-gray-200 hover:bg-gray-100 transition-colors">
+                    <div className="flex-shrink-0">
+                      <span className="text-gray-500 mr-3 text-xl">{getFileIcon(attachment.mimetype)}</span>
+                    </div>
+                    <div className="flex-grow min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{attachment.originalName}</p>
+                      <p className="text-xs text-gray-500">{formatFileSize(attachment.size)}</p>
+                    </div>
+                    <div className="flex-shrink-0 ml-3">
+                      <a 
+                        href={attachment.url} 
+                        download={attachment.originalName}
+                        className="inline-flex items-center px-3 py-1 bg-primary-600 text-white text-xs font-medium rounded-md hover:bg-primary-700 transition-colors"
+                      >
+                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Download
+                      </a>
+                    </div>
                   </div>
                 );
               }
